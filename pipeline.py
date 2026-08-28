@@ -5,7 +5,7 @@ def extract(filepath):
     """Lädt die CSV-Datei und gibt sie als Pandas DataFrame zurück."""
     print("Lade Daten...")
     df = pd.read_csv(filepath,sep=',', header=0, encoding='utf-8', low_memory=False)
-    print(f"Gelasene Daten: {len(df)} Zeilen, {len(df.columns)} Spalten")
+    print(f"Geladene Daten: {len(df)} Zeilen, {len(df.columns)} Spalten")
     return df
 
 def transform(df):
@@ -66,6 +66,29 @@ def load(df, db_path):
     
     conn.close()
 
+def export_excel(df, filepath):
+    """Exportiert die bereinigten Daten als Excel-Datei."""
+    print("Exportiere nach Excel...")
+    
+    # Zeitzone entfernen für Excel-Kompatibilität
+    df = df.copy()
+    df["timestamp"] = df["timestamp"].dt.tz_localize(None)
+    
+    # Zusammenfassung pro Jahr
+    yearly_summary = df.groupby("year").agg(
+        avg_load_mw=("load_actual_mw", "mean"),
+        avg_renewables_pct=("renewables_share_pct", "mean"),
+        avg_forecast_error=("forecast_error_mw", "mean")
+    ).round(1).reset_index()
+    
+    # Excel mit zwei Sheets erstellen
+    with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Rohdaten", index=False)
+        yearly_summary.to_excel(writer, sheet_name="Zusammenfassung", index=False)
+    
+    print(f"Exportiert: {filepath}")
+
+# main function to run the ETL process
 if __name__ == "__main__":
     print("Starting ETL pipeline...")
     
@@ -74,6 +97,7 @@ if __name__ == "__main__":
         df_raw = extract("time_series_60min_singleindex.csv") # Hier den Pfad zur CSV-Datei anpassen
         df_clean = transform(df_raw) # Hier den Pfad zur CSV-Datei anpassen
         load(df_clean, "energy_data.db") # Hier den Pfad zur SQLite-Datenbank anpassen
+        export_excel(df_clean, "energy_data.xlsx") # Hier den Pfad zur Excel-Datei anpassen
         print("ETL pipeline completed.")
     except FileNotFoundError:
         print("Fehler: CSV-Datei nicht gefunden!")
